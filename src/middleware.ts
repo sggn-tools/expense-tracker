@@ -1,21 +1,14 @@
 /**
  * src/middleware.ts
- * Middleware de autenticación que protege rutas del dashboard.
+ * Middleware NATIVO (Zero-Dependencies)
  *
- * Se ejecuta en el Edge Runtime ANTES de que Next.js renderice
- * cualquier página o ejecute cualquier API route. Si no hay sesión
- * válida, redirige a /login inmediatamente.
- *
- * IMPORTANTE: Importa auth.config.ts (ligero, sin Prisma/bcrypt)
- * en lugar de auth.ts para mantenerse bajo el límite de 1 MB
- * de Vercel Edge Functions.
+ * Se ejecuta en el Edge Runtime ANTES de que Next.js renderice.
+ * Para evadir el límite de 1MB de Vercel (Edge Functions), este
+ * middleware NO importa "next-auth" en absoluto. Solamente
+ * lee la presencia de la cookie JWT nativamente.
  */
-import NextAuth from "next-auth";
-import authConfig from "@/lib/auth.config";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-
-const { auth } = NextAuth(authConfig);
 
 // Rutas que requieren autenticación
 const PROTECTED_ROUTES = ["/dashboard"];
@@ -23,9 +16,16 @@ const PROTECTED_ROUTES = ["/dashboard"];
 // Rutas accesibles sólo sin sesión (redirigen al dashboard si ya hay sesión)
 const AUTH_ROUTES = ["/login", "/register"];
 
-export default auth((req: NextRequest & { auth: unknown }) => {
+export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  const isAuthenticated = !!req.auth;
+
+  // Verificamos si existe la cookie de sesión de Auth.js
+  // Se revisan todas las cookies por si está particionada o usa el prefijo seguro __Secure-
+  const isAuthenticated = req.cookies.getAll().some(
+    (cookie) =>
+      cookie.name.includes("next-auth.session-token") ||
+      cookie.name.includes("__Secure-next-auth.session-token")
+  );
 
   // Si está autenticado e intenta acceder a login → redirigir al dashboard
   if (isAuthenticated && AUTH_ROUTES.some((r) => pathname.startsWith(r))) {
@@ -41,13 +41,11 @@ export default auth((req: NextRequest & { auth: unknown }) => {
   }
 
   return NextResponse.next();
-});
+}
 
 // Configurar qué rutas activan el middleware.
-// El matcher excluye assets estáticos y rutas de Next.js internos.
 export const config = {
   matcher: [
     "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };
-
