@@ -5,10 +5,17 @@
  * Se ejecuta en el Edge Runtime ANTES de que Next.js renderice
  * cualquier página o ejecute cualquier API route. Si no hay sesión
  * válida, redirige a /login inmediatamente.
+ *
+ * IMPORTANTE: Importa auth.config.ts (ligero, sin Prisma/bcrypt)
+ * en lugar de auth.ts para mantenerse bajo el límite de 1 MB
+ * de Vercel Edge Functions.
  */
-import { auth } from "@/lib/auth";
+import NextAuth from "next-auth";
+import authConfig from "@/lib/auth.config";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+
+const { auth } = NextAuth(authConfig);
 
 // Rutas que requieren autenticación
 const PROTECTED_ROUTES = ["/dashboard"];
@@ -43,3 +50,4 @@ export const config = {
     "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };
+

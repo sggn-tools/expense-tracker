@@ -1,49 +1,33 @@
 /**
  * src/lib/auth.ts
- * Configuración central de NextAuth.js v5.
+ * Configuración COMPLETA de NextAuth.js v5 — solo para Node.js Runtime.
  *
- * Estrategia: JWT almacenado EXCLUSIVAMENTE en HttpOnly cookies.
- * Nunca se expone el token a JavaScript del cliente (sin localStorage).
- * La sesión se valida server-side en cada request via auth().
+ * Extiende la configuración base de auth.config.ts (compatible con Edge)
+ * añadiendo PrismaAdapter + CredentialsProvider + bcrypt.
+ *
+ * Este archivo es importado por:
+ *   - API routes (handlers)
+ *   - Server Components (auth())
+ *   - Server Actions (signIn / signOut)
+ *
+ * El middleware.ts NO debe importar este archivo; usa auth.config.ts.
  */
-import NextAuth, { type NextAuthConfig } from "next-auth";
+import NextAuth from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { loginSchema } from "@/schemas/auth";
+import authConfig from "@/lib/auth.config";
 
-const config: NextAuthConfig = {
+// Exportar handlers, auth helper y helpers de login/logout
+export const { handlers, auth, signIn, signOut } = NextAuth({
+  ...authConfig,
+
+  // ── Adapter (solo Node.js) ─────────────
   adapter: PrismaAdapter(prisma),
 
-  // ── Estrategia JWT ─────────────────────
-  // "jwt" no usa la tabla sessions en BD;
-  // la sesión vive en la cookie cifrada.
-  session: {
-    strategy: "jwt",
-    maxAge: 30 * 24 * 60 * 60, // 30 días
-  },
-
-  // ── Cookie segura (HttpOnly, Secure, SameSite) ──
-  // Next-Auth gestiona esto automáticamente en producción.
-  // En desarrollo (http://localhost) no se puede usar Secure=true,
-  // pero HttpOnly y SameSite=lax sí aplican.
-  cookies: {
-    sessionToken: {
-      name:
-        process.env.NODE_ENV === "production"
-          ? "__Secure-next-auth.session-token"
-          : "next-auth.session-token",
-      options: {
-        httpOnly: true,                          // ← CLAVE: inaccesible desde JS
-        sameSite: "lax",
-        path: "/",
-        secure: process.env.NODE_ENV === "production",
-      },
-    },
-  },
-
-  // ── Providers ─────────────────────────
+  // ── Providers (solo Node.js) ───────────
   providers: [
     CredentialsProvider({
       name: "credentials",
@@ -80,32 +64,5 @@ const config: NextAuthConfig = {
       },
     }),
   ],
+});
 
-  // ── Callbacks ─────────────────────────
-  callbacks: {
-    // Agrega el userId al token JWT
-    async jwt({ token, user }) {
-      if (user) {
-        token.id = user.id;
-      }
-      return token;
-    },
-
-    // Expone el userId en el objeto session del cliente
-    async session({ session, token }) {
-      if (token.id) {
-        session.user.id = token.id as string;
-      }
-      return session;
-    },
-  },
-
-  // ── Páginas personalizadas ─────────────
-  pages: {
-    signIn: "/login",
-    error: "/login",
-  },
-};
-
-// Exportar handlers, auth helper y helpers de login/logout
-export const { handlers, auth, signIn, signOut } = NextAuth(config);
